@@ -44,8 +44,9 @@ final class QuinaAction
             $html = pq('body');
 
             $data = array(
-                'info' => $this->processInfo(),
-                'raffle' =>$this->processRaffle($html),
+                'info' => $this->processInfo($html),
+                'awards' => $this->processAwards($html),
+                'numbers' => $this->processNumber($html),
             );
 
             FileSystemCache::store($key, $data, 1800);
@@ -67,42 +68,59 @@ final class QuinaAction
         return $response;
     }
 
-    public function processInfo()
+    public function processInfo($html)
     {
+        $doc = phpQuery::newDocument($html);
+        $date = $doc['div.glb-bloco span.data-concurso']->text();
+        $date = implode('-',array_reverse(explode('/',substr($date, 0, 10))));
+
+        $number = $doc['div.glb-bloco span.numero-concurso']->text();
+        $number = substr($number, -4);
 
         return array(
             'title' => (string) S::create('Quina')->toUpperCase(),
-            'createdat'=> Carbon::now('America/Sao_Paulo')->toDateTimeString(),
+            'date'=> $date,
+            'contest'=> $number,
         );
     }
 
-    public function processRaffle($html)
+    public function processAwards($html)
     {
         $doc = phpQuery::newDocument($html);
-        $number_raffle = $doc['div.glb-bloco span.numero-concurso']->text();
-        $number = substr($number_raffle, -4);
 
-        $date = $doc['div.glb-bloco span.data-concurso']->text();
-        $date_raffle = implode('-',array_reverse(explode('/',substr($date, 0, 10))));
-
-
+        if($doc['div.glb-bloco table.lista-premios tr.premio:eq(0) td.ganhadores-premio']->text() == 'Acumulou !!!')
+        {
+            $line1 = 'Próximo prêmio é de ' . $doc['div.glb-bloco span.valor-acumulado']->text();
+            $line2 = 'Acumulou!!!';
+        }
+        else
+        {
+            $line1 = $doc['div.glb-bloco table.lista-premios tr.premio:eq(0) td.ganhadores-premio']->text();
+            $line2 = trim($doc['div.glb-bloco table.lista-premios tr.premio:eq(0) td.rateio-premio']->text());
+        }
 
         return array(
-            'number'=>$number,
-            'date' =>$date_raffle,
-            'accumulated' =>$doc['div.glb-bloco span.valor-acumulado']->text(),
-            'scores' => array(
-                $doc['div.glb-bloco div.resultado-concurso span.numero-sorteado:eq(0)']->text(),
-                $doc['div.glb-bloco div.resultado-concurso span.numero-sorteado:eq(1)']->text(),
-                $doc['div.glb-bloco div.resultado-concurso span.numero-sorteado:eq(2)']->text(),
-                $doc['div.glb-bloco div.resultado-concurso span.numero-sorteado:eq(3)']->text(),
-                $doc['div.glb-bloco div.resultado-concurso span.numero-sorteado:eq(4)']->text(),
-            ),
-            'prize'=>array(
-                'winner'=>$doc['div.glb-bloco table.lista-premios tr.premio:eq(0) td.ganhadores-premio']->text(),
-                'money' =>$doc['div.glb-bloco table.lista-premios tr.premio:eq(0) td.rateio-premio']->text()
+            'winners' => array(
+                'line1' => $line1,
+                'line2' => $line2
             )
+        );
+    }
 
+    public function processNumber($html)
+    {
+        $doc = phpQuery::newDocument($html);
+
+        $data = array();
+
+        foreach($doc['div.glb-bloco div.resultado-concurso span.numero-sorteado'] as $key => $span)
+        {
+            $pq = pq($span);
+            $data[$key]['number'] = str_pad($pq->text(), 2, '0', STR_PAD_LEFT) ;
+        }
+
+        return array(
+            'scores' => $data
         );
     }
 }
